@@ -1,0 +1,16 @@
+options{	STATIC = false;}PARSER_BEGIN(PseudoLexer)package lexer;import java.io.Reader;import java.util.List;
+import java.util.ArrayList;public class PseudoLexer{	public static List<Token> lex(Reader reader) {		try		{			PseudoLexer lexer = new PseudoLexer(reader);			return lexer.dumpTokens();		}		catch(TokenMgrError e)        {        	throw new RuntimeException("Failed to lex", e);        }		catch(Exception e)		{			throw new RuntimeException("Failed to lex", e);		}	}}PARSER_END(PseudoLexer)SKIP :{	" "|	"\r"|	"\t"|	"\n"}TOKEN :{	< IF : "if" >|	< THEN : "then" >|	< ELSE : "else" >|	< WHILE : "while" >|	< DO : "do" >}TOKEN :{	< PLUS : "+" >|	< MINUS : "-" >|	< MULTIPLY : "*" >|	< DIVIDE : "/" >
+|	< LESSER : "<" >
+|	< GREATER : ">" >
+|	< EQUAL : "=" >
+|	< LB : "(" >
+|	< RB : ")" >}TOKEN :{	< INTEGER_DEC :  "0" | [ "1"-"9" ] ([ "0"-"9" ])* >
+|	< INTEGER_OCT : "0" ("0" | [ "1"-"7" ] ([ "0"-"7" ])*) >
+|	< INTEGER_HEX : "0" ("x" | "X") ([ "0"-"9", "a" - "f", "A" - "F" ])+ >|	< REAL_DEC : < INTEGER_DEC > "." ([ "0"-"9" ])+ >|	< REAL_OCT : < INTEGER_OCT > "." ([ "0"-"7" ])+ >|	< REAL_HEX : < INTEGER_HEX > "." ([ "0"-"9", "a" - "f", "A" - "F" ])+ >}TOKEN :{	< IDENTIFIER : < CHARACTER > (< CHARACTER > | < DIGIT >)* (("_"|".")(< CHARACTER > | < DIGIT >)+)? >|	< #CHARACTER : ["a" - "z", "A" - "Z"] >|	< #DIGIT : ["0" - "9"] >}TOKEN :{	< SEMICOLON : ";" >}List<Token> dumpTokens() :{
+	Token t = null;
+	List<Token> tokens = new ArrayList<Token>();
+}{	(
+		(			t = < IF >		|	t = < ELSE >		|	t = < THEN >		|	t = < DO >		|	t = < WHILE >		|	t = < INTEGER_DEC >		|	t = < INTEGER_OCT >		|	t = < INTEGER_HEX >		|	t = < REAL_DEC >		|	t = < REAL_OCT >		|	t = < REAL_HEX >		|	t = < PLUS >		|	t = < MINUS >		|	t = < MULTIPLY >		|	t = < DIVIDE >		|	t = < LESSER >		|	t = < GREATER >		|	t = < EQUAL >		|	t = < LB >		|	t = < RB >		|	t = < IDENTIFIER >		|	t = < SEMICOLON >		)		{			tokens.add(t);		}
+	)* < EOF >
+	{
+		return tokens;	}}

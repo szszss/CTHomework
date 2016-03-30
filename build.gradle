@@ -1,0 +1,59 @@
+buildscript {
+    repositories {
+		maven{url 'http://maven.oschina.net/content/groups/public/'}
+    }
+	
+    dependencies {
+		classpath 'ca.coglinc:javacc-gradle-plugin:2.3.1'
+    }
+}
+
+project(":lexer") {
+	ext {
+		jjtPackage = 'src/main/javacc/lexer'
+	}
+}
+
+project(":parser") {
+	ext {
+		jjtPackage = 'src/main/javacc/parser'
+	}
+}
+
+allprojects  {
+
+	apply plugin: 'java'
+	apply plugin: 'eclipse'
+	apply plugin: 'idea'
+	apply plugin: "ca.coglinc.javacc"
+
+	compileJava{options.encoding = 'utf-8'}
+	[compileJava, compileTestJava]*.options*.encoding = 'UTF-8'
+
+	repositories {
+		maven{url 'http://maven.oschina.net/content/groups/public/'}
+	}
+
+	dependencies {
+		testCompile 'junit:junit:4.12'
+	}
+
+	sourceSets {
+		main {
+			java {
+				srcDir "src/main/javacc"
+			}
+		}
+	}
+
+	compileJavacc {
+		inputDirectory = file(jjtPackage)
+		outputDirectory = file(jjtPackage)
+	}
+
+	compileJavacc.doLast {
+		delete file(jjtPackage + '/tmp')
+	}
+}
+
+eclipseClasspath.dependsOn("compileJavacc")
