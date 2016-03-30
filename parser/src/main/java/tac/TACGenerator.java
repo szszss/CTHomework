@@ -12,6 +12,9 @@ import parser.Node;
 import parser.SimpleNode;
 import tac.TACProgram.Condition;
 import tac.TACProgram.Constant;
+import tac.TACProgram.JIT;
+import tac.TACProgram.Jump;
+import tac.TACProgram.Label;
 import tac.TACProgram.Operator;
 import tac.TACProgram.RValue;
 import tac.TACProgram.Temp;
@@ -187,20 +190,32 @@ public class TACGenerator implements AstParserTreeConstants{
 		return right;
 	}
 	
+	/**
+	 * 访问一个IfStatement语句,首先会访问它的Condition节点,生成条件判断中的表达式求值,然后生成JIT(JumpIfTrue)指令,
+	 * 然后生成一个Goto,再生成Label:IfTrue,If语句中的代码块,和Label:IfFalse.最后将JIT的转跳目标指向IfTrue,
+	 * Goto的转跳目标指向IfFalse.
+	 * @param program
+	 * @param ifStatement IfStatement节点
+	 */
 	protected void visitIfStatement(TACProgram program, Node ifStatement) {
 		assertType(ifStatement, JJTIFSTATEMENT);
 		assertChildrenNum(ifStatement, 2);
 		Condition condition = visitCondition(program, ifStatement.jjtGetChild(0));
+		JIT jit = program.jit(condition);
+		Jump jumpWhenFalse = program.jump();
+		Label ifTrue = program.label();
 		Node statementBlock = ifStatement.jjtGetChild(1);
-		
 		if(statementBlock.getId() == JJTSTATEMENTBLOCK)
 			visitStatementBlock(program, statementBlock);
 		else
 			visitStatement(program, statementBlock);
+		Label ifFalse = program.label();
+		jit.target = ifTrue;
+		jumpWhenFalse.target = ifFalse;
 	}
 	
 	protected Condition visitCondition(TACProgram program, Node condition) {
-		
+		RValue 
 	}
 	
 	/**

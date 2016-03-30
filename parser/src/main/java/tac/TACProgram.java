@@ -28,12 +28,25 @@ public final class TACProgram {
 	Label label() {
 		Label label = new Label("L" + labelIndex++);
 		labels.add(label);
+		codes.add(label);
 		return label;
 	}
 	
 	void assign(LValue target, Operator operator, RValue operand1, RValue operand2) {
 		Assign assign = new Assign(target, operator, operand1, operand2);
 		codes.add(assign);
+	}
+	
+	JIT jit(Condition condition) {
+		JIT jit = new JIT(condition);
+		codes.add(jit);
+		return jit;
+	}
+	
+	Jump jump() {
+		Jump jump = new Jump();
+		codes.add(jump);
+		return jump;
 	}
 	
 	public String dump() {
@@ -182,6 +195,10 @@ public final class TACProgram {
 	
 	public final class JIT extends Jump {
 		Condition condition;
+		
+		public JIT(Condition condition) {
+			this.condition = condition;
+		}
 	}
 	
 	public static enum Operator {

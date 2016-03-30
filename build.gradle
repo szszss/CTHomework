@@ -8,18 +8,6 @@ buildscript {
     }
 }
 
-project(":lexer") {
-	ext {
-		jjtPackage = 'src/main/javacc/lexer'
-	}
-}
-
-project(":parser") {
-	ext {
-		jjtPackage = 'src/main/javacc/parser'
-	}
-}
-
 allprojects  {
 
 	apply plugin: 'java'
@@ -27,6 +15,11 @@ allprojects  {
 	apply plugin: 'idea'
 	apply plugin: "ca.coglinc.javacc"
 
+	eclipseJdt << {
+		File f = file('.settings/org.eclipse.core.resources.prefs')
+		f.write('eclipse.preferences.version=1\n')
+		f.append('encoding/<project>=utf-8')
+	}
 	compileJava{options.encoding = 'utf-8'}
 	[compileJava, compileTestJava]*.options*.encoding = 'UTF-8'
 
@@ -45,15 +38,40 @@ allprojects  {
 			}
 		}
 	}
+}
 
+project(":lexer") {
+	ext {
+		jjtPackage = 'src/main/javacc/lexer'
+	}
 	compileJavacc {
 		inputDirectory = file(jjtPackage)
 		outputDirectory = file(jjtPackage)
 	}
-
 	compileJavacc.doLast {
 		delete file(jjtPackage + '/tmp')
 	}
+	eclipseClasspath.dependsOn("compileJavacc")
 }
 
-eclipseClasspath.dependsOn("compileJavacc")
+project(":parser") {
+	ext {
+		jjtPackage = 'src/main/javacc/parser'
+	}
+	compileJavacc {
+		inputDirectory = file(jjtPackage)
+		outputDirectory = file(jjtPackage)
+	}
+	compileJjtree {
+		inputDirectory = file(jjtPackage)
+		outputDirectory = file(jjtPackage)
+	}
+	compileJavacc.doLast {
+		delete file(jjtPackage + '/tmp')
+	}
+	eclipseClasspath.dependsOn("compileJjtree", "compileJavacc")
+}
+
+tasks.eclipse.doLast {
+    delete ".project"
+}
