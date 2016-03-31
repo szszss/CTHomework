@@ -150,6 +150,15 @@ public final class TACProgram {
 	public class Condition {
 		RValue left, right;
 		Cond cond;
+		public Condition(RValue left, RValue right, Cond cond) {
+			this.left = left;
+			this.right = right;
+			this.cond = cond;
+		}
+		@Override
+		public String toString() {
+			return left + " " + cond + " " + right;
+		}
 	}
 	
 	public abstract class TACCode {
@@ -191,6 +200,10 @@ public final class TACProgram {
 	
 	public class Jump extends TACCode {
 		Label target;
+		@Override
+		public String toString() {
+			return "goto " + target;
+		}
 	}
 	
 	public final class JIT extends Jump {
@@ -198,6 +211,11 @@ public final class TACProgram {
 		
 		public JIT(Condition condition) {
 			this.condition = condition;
+		}
+		
+		@Override
+		public String toString() {
+			return "if " + condition + " goto " + target;
 		}
 	}
 	

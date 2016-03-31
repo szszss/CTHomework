@@ -10,6 +10,7 @@ import java.util.Set;
 import parser.AstParserTreeConstants;
 import parser.Node;
 import parser.SimpleNode;
+import tac.TACProgram.Cond;
 import tac.TACProgram.Condition;
 import tac.TACProgram.Constant;
 import tac.TACProgram.JIT;
@@ -126,13 +127,13 @@ public class TACGenerator implements AstParserTreeConstants{
 			visitAssignment(program, unknownStatement);
 			break;
 		case JJTIFSTATEMENT : //if then
-			
+			visitIfStatement(program, unknownStatement);
 			break;
 		case JJTIFELSESTATEMENT : //if then else
-			
+			//TODO :)
 			break;	
 		case JJTWHILESTATEMENT : //While
-
+			visitWhileStatement(program, unknownStatement);
 			break;
 		default:
 			throw new RuntimeException("Unexpected node:" + unknownStatement);
@@ -215,7 +216,33 @@ public class TACGenerator implements AstParserTreeConstants{
 	}
 	
 	protected Condition visitCondition(TACProgram program, Node condition) {
-		RValue 
+		assertType(condition, JJTCONDITION);
+		assertChildrenNum(condition, 2);
+		RValue left = visitExpression(program, condition.jjtGetChild(0));
+		RValue right = visitExpression(program, condition.jjtGetChild(1));
+		Condition cond = program.new Condition(left, right, (Cond)((SimpleNode)condition).jjtGetValue());
+		releaseTemp(left);
+		releaseTemp(right);
+		return cond;
+	}
+	
+	protected void visitWhileStatement(TACProgram program, Node whileStatement) {
+		assertType(whileStatement, JJTWHILESTATEMENT);
+		assertChildrenNum(whileStatement, 2);
+		Label before = program.label();
+		Condition condition = visitCondition(program, whileStatement.jjtGetChild(0));
+		JIT jit = program.jit(condition);
+		Jump jumpWhenFalse = program.jump();
+		Label ifTrue = program.label();
+		Node statementBlock = whileStatement.jjtGetChild(1);
+		if(statementBlock.getId() == JJTSTATEMENTBLOCK)
+			visitStatementBlock(program, statementBlock);
+		else
+			visitStatement(program, statementBlock);
+		program.jump().target = before;
+		Label ifFalse = program.label();
+		jit.target = ifTrue;
+		jumpWhenFalse.target = ifFalse;
 	}
 	
 	/**

@@ -20,7 +20,7 @@ public class Parser implements AstParserTreeConstants {
 			try {
 				AstParser parser = new AstParser(reader);
 				SimpleNode node = parser.Start();
-				node.dump("");
+				//node.dump("");
 				TACGenerator tacg = new TACGenerator(node);
 				System.out.println(tacg.generate().dump());;
 				
