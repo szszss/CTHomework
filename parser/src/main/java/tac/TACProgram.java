@@ -11,12 +11,24 @@ public final class TACProgram {
 	private List<Label> labels = new ArrayList<>();
 	private List<TACCode> codes = new ArrayList<>(64);
 	private int tempIndex = 0, labelIndex = 0;
+	private boolean lastCodeIsLabel = false;
+	
+	private void code(TACCode c) {
+		codes.add(c);
+		lastCodeIsLabel = false;
+	}
 	
 	Variable variable(String name, boolean isParam) {
 		Variable var = new Variable(name);
 		var.param = isParam;
 		variables.add(var);
 		return var;
+	}
+	
+	Constant constant(String value) {
+		Constant constant = new Constant(value);
+		constants.add(constant);
+		return constant;
 	}
 	
 	Temp temp() {
@@ -26,26 +38,29 @@ public final class TACProgram {
 	}
 	
 	Label label() {
+		if(lastCodeIsLabel)
+			return (Label)codes.get(codes.size()-1);
 		Label label = new Label("L" + labelIndex++);
 		labels.add(label);
-		codes.add(label);
+		code(label);
+		lastCodeIsLabel = true;
 		return label;
 	}
 	
 	void assign(LValue target, Operator operator, RValue operand1, RValue operand2) {
 		Assign assign = new Assign(target, operator, operand1, operand2);
-		codes.add(assign);
+		code(assign);
 	}
 	
 	JIT jit(Condition condition) {
 		JIT jit = new JIT(condition);
-		codes.add(jit);
+		code(jit);
 		return jit;
 	}
 	
 	Jump jump() {
 		Jump jump = new Jump();
-		codes.add(jump);
+		code(jump);
 		return jump;
 	}
 	
@@ -202,7 +217,7 @@ public final class TACProgram {
 		Label target;
 		@Override
 		public String toString() {
-			return "goto " + target;
+			return "goto " + target.readableName;
 		}
 	}
 	
@@ -215,7 +230,7 @@ public final class TACProgram {
 		
 		@Override
 		public String toString() {
-			return "if " + condition + " goto " + target;
+			return "if " + condition + " goto " + target.readableName;
 		}
 	}
 	

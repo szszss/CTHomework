@@ -58,11 +58,17 @@ public class TACGenerator implements AstParserTreeConstants{
 		return variable;
 	}
 	
+	/**
+	 * 声明一个新常量或获取一个已有的常量,程序会保证针对同一个常量的引用总是源自唯一一个Constant实例.
+	 * @param program
+	 * @param value 常量值
+	 * @return 唯一的Constant实例
+	 */
 	protected Constant getConstant(TACProgram program, String value) {
 		Constant constant = constants.get(value);
 		if(constant == null)
 		{
-			constant = program.new Constant(value);
+			constant = program.constant(value);
 			constants.put(value, constant);
 		}
 		return constant;
@@ -88,7 +94,6 @@ public class TACGenerator implements AstParserTreeConstants{
 		begin();
 		try {
 			visitStatementBlock(program, root.jjtGetChild(0));
-			inject(program);
 		} finally {
 			end();
 		}
@@ -99,10 +104,6 @@ public class TACGenerator implements AstParserTreeConstants{
 		variables = new HashMap<>();
 		constants = new HashMap<>();
 		temps = new LinkedList<>();
-	}
-	
-	protected void inject(TACProgram program) {
-		
 	}
 	
 	protected void end() {
@@ -130,7 +131,7 @@ public class TACGenerator implements AstParserTreeConstants{
 			visitIfStatement(program, unknownStatement);
 			break;
 		case JJTIFELSESTATEMENT : //if then else
-			//TODO :)
+			visitIfElseStatement(program, unknownStatement);
 			break;	
 		case JJTWHILESTATEMENT : //While
 			visitWhileStatement(program, unknownStatement);
@@ -201,29 +202,54 @@ public class TACGenerator implements AstParserTreeConstants{
 	protected void visitIfStatement(TACProgram program, Node ifStatement) {
 		assertType(ifStatement, JJTIFSTATEMENT);
 		assertChildrenNum(ifStatement, 2);
-		Condition condition = visitCondition(program, ifStatement.jjtGetChild(0));
-		JIT jit = program.jit(condition);
-		Jump jumpWhenFalse = program.jump();
-		Label ifTrue = program.label();
-		Node statementBlock = ifStatement.jjtGetChild(1);
+		Condition condition = visitCondition(program, ifStatement.jjtGetChild(0)); //生成条件表达式的计算
+		JIT jit = program.jit(condition); //生成if [condition] goto [labelTrue]
+		Jump jumpWhenFalse = program.jump(); //生成 goto [labelFalse]
+		Label ifTrue = program.label(); //生成[labelTrue]
+		Node statementBlock = ifStatement.jjtGetChild(1); //生成条件为真时执行的代码块
 		if(statementBlock.getId() == JJTSTATEMENTBLOCK)
 			visitStatementBlock(program, statementBlock);
 		else
 			visitStatement(program, statementBlock);
-		Label ifFalse = program.label();
-		jit.target = ifTrue;
+		Label ifFalse = program.label(); //生成[labelFalse]
+		jit.target = ifTrue; //连接goto和label
 		jumpWhenFalse.target = ifFalse;
 	}
 	
 	protected Condition visitCondition(TACProgram program, Node condition) {
 		assertType(condition, JJTCONDITION);
 		assertChildrenNum(condition, 2);
-		RValue left = visitExpression(program, condition.jjtGetChild(0));
-		RValue right = visitExpression(program, condition.jjtGetChild(1));
-		Condition cond = program.new Condition(left, right, (Cond)((SimpleNode)condition).jjtGetValue());
-		releaseTemp(left);
+		RValue left = visitExpression(program, condition.jjtGetChild(0)); //生成LHS的计算
+		RValue right = visitExpression(program, condition.jjtGetChild(1)); //生成RHS的计算
+		Condition cond = program.new Condition(left, right, (Cond)((SimpleNode)condition).jjtGetValue()); //这里并不会生成代码 8-)
+		releaseTemp(left);  //LHS或RHS的计算结果很可能是个临时变量,所以尝试释放它们
 		releaseTemp(right);
 		return cond;
+	}
+	
+	protected void visitIfElseStatement(TACProgram program, Node ifElseStatement) {
+		assertType(ifElseStatement, JJTIFELSESTATEMENT);
+		assertChildrenNum(ifElseStatement, 3);
+		Condition condition = visitCondition(program, ifElseStatement.jjtGetChild(0)); //生成条件表达式的计算
+		JIT jit = program.jit(condition); //生成if [condition] goto [labelTrue]
+		Jump jumpWhenFalse = program.jump(); //生成 goto [labelFalse]
+		Label ifTrue = program.label(); //生成[labelTrue]
+		Node statementBlock = ifElseStatement.jjtGetChild(1); //生成条件为真时执行的代码块
+		if(statementBlock.getId() == JJTSTATEMENTBLOCK)
+			visitStatementBlock(program, statementBlock);
+		else
+			visitStatement(program, statementBlock);
+		Jump jumpOut = program.jump(); //生成goto [labelOut]
+		Label ifFalse = program.label(); //生成[labelFalse]
+		statementBlock = ifElseStatement.jjtGetChild(2); //生成条件为假时执行的代码块
+		if(statementBlock.getId() == JJTSTATEMENTBLOCK)
+			visitStatementBlock(program, statementBlock);
+		else
+			visitStatement(program, statementBlock);
+		Label commonOut = program.label(); //生成[labelOut]
+		jit.target = ifTrue; //连接goto和label
+		jumpWhenFalse.target = ifFalse;
+		jumpOut.target = commonOut;
 	}
 	
 	protected void visitWhileStatement(TACProgram program, Node whileStatement) {
