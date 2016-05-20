@@ -4,6 +4,7 @@ import java.io.StringReader;
 import java.util.Scanner;
 
 import tac.TACGenerator;
+import tac.TACOptimizedGenerator;
 
 public class Parser implements AstParserTreeConstants {
 	
@@ -20,9 +21,13 @@ public class Parser implements AstParserTreeConstants {
 			try {
 				AstParser parser = new AstParser(reader);
 				SimpleNode node = parser.Start();
-				//node.dump("");
+				node.dump("");
+				
 				TACGenerator tacg = new TACGenerator(node);
-				System.out.println(tacg.generate().dump());;
+				System.out.println(tacg.generate().dump());
+				
+				TACOptimizedGenerator tacog = new TACOptimizedGenerator(node);
+				System.out.println(tacog.generate().dump());
 				
 			} catch (Exception e) {
 				e.printStackTrace();
