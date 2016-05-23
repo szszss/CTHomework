@@ -277,7 +277,7 @@ public class TACGenerator implements AstParserTreeConstants{
 	 * @param exceptedType 预期的节点类型,见{@link AstParserTreeConstants}
 	 * @throws RuntimeException 如果实际的节点类型与预期不符
 	 */
-	private void assertType(Node node, int exceptedType) throws RuntimeException {
+	protected void assertType(Node node, int exceptedType) throws RuntimeException {
 		if(node.getId() != exceptedType)
 			throw new RuntimeException("Unexpected node:" + node + 
 					" Expect:" + jjtNodeName[exceptedType] + 
@@ -290,7 +290,7 @@ public class TACGenerator implements AstParserTreeConstants{
 	 * @param exceptedNum 预期的子节点数量
 	 * @throws RuntimeException 如果实际节点数量与预期不符
 	 */
-	private void assertChildrenNum(Node node, int exceptedNum) throws RuntimeException {
+	protected void assertChildrenNum(Node node, int exceptedNum) throws RuntimeException {
 		if(node.jjtGetNumChildren() != exceptedNum)
 			throw new RuntimeException("Unexpected number of children:" + node + 
 					" Expect:" + exceptedNum + 
