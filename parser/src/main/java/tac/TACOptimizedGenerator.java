@@ -22,6 +22,7 @@ public class TACOptimizedGenerator extends TACGenerator {
 	private Map<NodeInfo, Map<String, Integer>> varScopeInfo = new HashMap<>();
 	private Map<String, Integer> currentScopeInfo = new HashMap<>();
 	private Map<Node, String> commonSubexpressionEliminationTable = new IdentityHashMap<>();
+	private int currentBasicBlockId = 0;
 	
 	public TACOptimizedGenerator(Node astRoot) throws IllegalArgumentException {
 		super(astRoot);
@@ -64,7 +65,8 @@ public class TACOptimizedGenerator extends TACGenerator {
 				}
 			} else if(id == JJTCONDITION) {
 				Node leftNode = node.jjtGetChild(0), rightNode = node.jjtGetChild(1);
-				NodeInfo leftInfo = travelNode(leftNode), rightInfo = travelNode(rightNode);
+				NodeInfo leftInfo = travelNode(leftNode);
+				NodeInfo rightInfo = travelNode(rightNode);
 				if(leftInfo.isConst)
 					constFoldingTable.put(leftNode, calConst(leftNode));
 				else {
@@ -78,6 +80,15 @@ public class TACOptimizedGenerator extends TACGenerator {
 					varScopeInfo.put(rightInfo, new HashMap<>(currentScopeInfo));
 				}
 				info.isConst = false;
+			} else if(id == JJTIFSTATEMENT || id == JJTIFELSESTATEMENT || id == JJTWHILESTATEMENT) {
+				travelNode(node.jjtGetChild(0));
+				currentBasicBlockId++;
+				travelNode(node.jjtGetChild(1));
+				if(id == JJTIFELSESTATEMENT) {
+					currentBasicBlockId++;
+					travelNode(node.jjtGetChild(2));
+				}
+				currentBasicBlockId++;
 			} else {
 				for(int i = 0; i < length; i++) {
 					NodeInfo childInfo = travelNode(node.jjtGetChild(i));
@@ -102,6 +113,7 @@ public class TACOptimizedGenerator extends TACGenerator {
 		//nodeHash.put(node, result);
 		info.hash = result;
 		info.node = node;
+		info.basicBlockId = currentBasicBlockId;
 		return info;
 	}
 	
@@ -151,7 +163,7 @@ public class TACOptimizedGenerator extends TACGenerator {
 			NodeInfo source = expressions.get(i);
 			for(int j = i+1; j < length; j++) {
 				NodeInfo target = expressions.get(j);
-				if(source.hash == target.hash) {
+				if(source.hash == target.hash && source.basicBlockId == target.basicBlockId) {
 					if(isNodeEquals(source.node, target.node)) {
 						if(isInSameScope(source.assignName, source, target)) {
 							SimpleNode ss = (SimpleNode)source.node;
@@ -193,7 +205,7 @@ public class TACOptimizedGenerator extends TACGenerator {
 		Integer s2 = scope2.get(name);
 		if(s1 == null && s2 == 1)
 			return true;
-		if(s1 != null && s2 != s1 + 1)
+		if(s1 != null && s2 == s1 + 1)
 			return true;
 		return false;
 	}
@@ -221,6 +233,7 @@ public class TACOptimizedGenerator extends TACGenerator {
 		boolean isConst = true;
 		Node node;
 		String assignName = null;
+		int basicBlockId = -1;
 	}
 
 	@Override
