@@ -2,6 +2,7 @@ package tac;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 public final class TACProgram {
 	
@@ -12,6 +13,7 @@ public final class TACProgram {
 	private List<TACCode> codes = new ArrayList<>(64);
 	private int tempIndex = 0, labelIndex = 0;
 	private boolean lastCodeIsLabel = false;
+	private boolean linked = false;
 	
 	private void code(TACCode c) {
 		codes.add(c);
@@ -73,9 +75,34 @@ public final class TACProgram {
 		return sb.toString();
 	}
 	
-	interface LValue {};
+	public void link() {
+		if(!linked) {
+			for(int i = 0; i < codes.size(); i++) {
+				TACCode code = codes.get(i);
+				if(code instanceof Label) {
+					Label label = (Label)code;
+					label.line = i;
+				}
+			}
+			linked = true;
+		}
+	}
 	
-	interface RValue {};
+	List<Variable> getVariables() {
+		return variables;
+	}
+	
+	public List<TACCode> getCodes() {
+		return codes;
+	}
+
+	interface LValue {
+		abstract void writeValue(int value, Map<String, Integer> runtimeVars);
+	};
+	
+	interface RValue {
+		abstract int evalValue(Map<String, Integer> runtimeVars);
+	};
 	
 	public class Constant implements RValue {
 		final String value;
@@ -123,6 +150,11 @@ public final class TACProgram {
 			return value;
 		}		
 		//-------------------------------
+
+		@Override
+		public int evalValue(Map<String, Integer> runtimeVars) {
+			return NumberUtil.getNumberInt(value);
+		}
 	}
 	
 	public class Variable implements LValue, RValue {
@@ -149,6 +181,16 @@ public final class TACProgram {
 		public String toString() {
 			return name;
 		}
+
+		@Override
+		public int evalValue(Map<String, Integer> runtimeVars) {
+			return runtimeVars.get(name);
+		}
+
+		@Override
+		public void writeValue(int value, Map<String, Integer> runtimeVars) {
+			runtimeVars.put(name, value);
+		}
 	}
 	
 	public class Temp implements LValue, RValue {
@@ -159,6 +201,14 @@ public final class TACProgram {
 		@Override
 		public String toString() {
 			return name;
+		}
+		@Override
+		public int evalValue(Map<String, Integer> runtimeVars) {
+			return runtimeVars.get(name);
+		}
+		@Override
+		public void writeValue(int value, Map<String, Integer> runtimeVars) {
+			runtimeVars.put(name, value);
 		}
 	}
 	
@@ -174,20 +224,28 @@ public final class TACProgram {
 		public String toString() {
 			return left + " " + cond + " " + right;
 		}
+		public boolean eval(Map<String, Integer> runtimeVars) {
+			return cond.eval(left, right, runtimeVars);
+		}
 	}
 	
 	public abstract class TACCode {
-		
+		public abstract int eval(int pc, Map<String, Integer> runtimeVars);
 	}
 	
 	public final class Label extends TACCode {
 		String readableName;
+		int line = -1;
 		public Label(String name) {
 			this.readableName = name;
 		}
 		@Override
 		public String toString() {
 			return readableName+":";
+		}
+		@Override
+		public int eval(int pc, Map<String, Integer> runtimeVars) {
+			return pc+1;
 		}
 	}
 	
@@ -211,6 +269,11 @@ public final class TACProgram {
 				str += " " + operator + " " + operand2;
 			return str;
 		}
+		@Override
+		public int eval(int pc, Map<String, Integer> runtimeVars) {
+			operand0.writeValue(operator.eval(operand1, operand2, runtimeVars), runtimeVars);
+			return pc+1;
+		}
 	}
 	
 	public class Jump extends TACCode {
@@ -218,6 +281,10 @@ public final class TACProgram {
 		@Override
 		public String toString() {
 			return "goto " + target.readableName;
+		}
+		@Override
+		public int eval(int pc, Map<String, Integer> runtimeVars) {
+			return target.line + 1;
 		}
 	}
 	
@@ -232,6 +299,13 @@ public final class TACProgram {
 		public String toString() {
 			return "if " + condition + " goto " + target.readableName;
 		}
+		
+		@Override
+		public int eval(int pc, Map<String, Integer> runtimeVars) {
+			if(condition.eval(runtimeVars))
+				return target.line + 1;
+			return pc + 1;
+		}
 	}
 	
 	public static enum Operator {
@@ -240,22 +314,49 @@ public final class TACProgram {
 			public String toString() {
 				return "+";
 			}
+
+			@Override
+			public int eval(RValue v1, RValue v2, Map<String, Integer> runtimeVars) {
+				return v1.evalValue(runtimeVars) + v2.evalValue(runtimeVars);
+			}
 		}, SUB {
 			@Override
 			public String toString() {
 				return "-";
+			}
+
+			@Override
+			public int eval(RValue v1, RValue v2, Map<String, Integer> runtimeVars) {
+				return v1.evalValue(runtimeVars) - v2.evalValue(runtimeVars);
 			}
 		}, MUL {
 			@Override
 			public String toString() {
 				return "*";
 			}
+
+			@Override
+			public int eval(RValue v1, RValue v2, Map<String, Integer> runtimeVars) {
+				return v1.evalValue(runtimeVars) * v2.evalValue(runtimeVars);
+			}
 		}, DIV {
 			@Override
 			public String toString() {
 				return "/";
 			}
-		}, ASSIGN;
+
+			@Override
+			public int eval(RValue v1, RValue v2, Map<String, Integer> runtimeVars) {
+				return v1.evalValue(runtimeVars) / v2.evalValue(runtimeVars);
+			}
+		}, ASSIGN {
+			@Override
+			public int eval(RValue v1, RValue v2, Map<String, Integer> runtimeVars) {
+				return v1.evalValue(runtimeVars);
+			}
+		};
+		
+		public abstract int eval(RValue v1, RValue v2, Map<String, Integer> runtimeVars);
 	}
 	
 	public static enum Cond {
@@ -264,16 +365,33 @@ public final class TACProgram {
 			public String toString() {
 				return ">";
 			}
+
+			@Override
+			public boolean eval(RValue v1, RValue v2, Map<String, Integer> runtimeVars) {
+				return v1.evalValue(runtimeVars) > v2.evalValue(runtimeVars);
+			}
 		}, EQUAL {
 			@Override
 			public String toString() {
 				return "=";
+			}
+
+			@Override
+			public boolean eval(RValue v1, RValue v2, Map<String, Integer> runtimeVars) {
+				return v1.evalValue(runtimeVars) == v2.evalValue(runtimeVars);
 			}
 		}, LESSER {
 			@Override
 			public String toString() {
 				return "<";
 			}
+
+			@Override
+			public boolean eval(RValue v1, RValue v2, Map<String, Integer> runtimeVars) {
+				return v1.evalValue(runtimeVars) < v2.evalValue(runtimeVars);
+			}
 		};
+		
+		public abstract boolean eval(RValue v1, RValue v2, Map<String, Integer> runtimeVars);
 	}
 }

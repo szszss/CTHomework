@@ -2,7 +2,9 @@ package tac;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.IdentityHashMap;
+import java.util.List;
 import java.util.Map;
 
 import parser.Node;
@@ -15,8 +17,11 @@ import tac.TACProgram.Variable;
 
 public class TACOptimizedGenerator extends TACGenerator {
 
-	private Map<Node, Integer> nodeHash = new IdentityHashMap<>();
 	private Map<Node, String> constFoldingTable = new IdentityHashMap<>();
+	private List<NodeInfo> expressions = new ArrayList<>();
+	private Map<NodeInfo, Map<String, Integer>> varScopeInfo = new HashMap<>();
+	private Map<String, Integer> currentScopeInfo = new HashMap<>();
+	private Map<Node, String> commonSubexpressionEliminationTable = new IdentityHashMap<>();
 	
 	public TACOptimizedGenerator(Node astRoot) throws IllegalArgumentException {
 		super(astRoot);
@@ -25,6 +30,7 @@ public class TACOptimizedGenerator extends TACGenerator {
 	
 	private void travelAst(Node node) {
 		travelNode(node);
+		cse();
 	}
 	
 	private NodeInfo travelNode(Node node) {
@@ -33,21 +39,44 @@ public class TACOptimizedGenerator extends TACGenerator {
 		NodeInfo info = new NodeInfo();
 		int length = node.jjtGetNumChildren();
 		if(length > 0) {
+			int id = node.getId();
 			//常量折叠
-			if(node.getId() == JJTASSIGNMENTSTATEMENT) {
+			if(id == JJTASSIGNMENTSTATEMENT) {
 				travelNode(node.jjtGetChild(0));
+				String varName = (String)((SimpleNode)node.jjtGetChild(0)).jjtGetValue();
 				Node valueNode = node.jjtGetChild(1);
 				NodeInfo childInfo = travelNode(valueNode);
 				if(childInfo.isConst)
 					constFoldingTable.put(valueNode, calConst(valueNode));
+				else {
+					childInfo.assignName = varName;
+					expressions.add(childInfo);
+					varScopeInfo.put(childInfo, new HashMap<>(currentScopeInfo));
+				}
 				info.isConst = false;
-			} else if(node.getId() == JJTCONDITION) {
+				//更新变量作用域信息
+				
+				Integer scopeId = currentScopeInfo.get(varName);
+				if(scopeId == null) {
+					currentScopeInfo.put(varName, 1);
+				} else {
+					currentScopeInfo.put(varName, scopeId + 1);
+				}
+			} else if(id == JJTCONDITION) {
 				Node leftNode = node.jjtGetChild(0), rightNode = node.jjtGetChild(1);
 				NodeInfo leftInfo = travelNode(leftNode), rightInfo = travelNode(rightNode);
 				if(leftInfo.isConst)
 					constFoldingTable.put(leftNode, calConst(leftNode));
+				else {
+					expressions.add(leftInfo);
+					varScopeInfo.put(leftInfo, new HashMap<>(currentScopeInfo));
+				}
 				if(rightInfo.isConst)
 					constFoldingTable.put(rightNode, calConst(rightNode));
+				else {
+					expressions.add(rightInfo);
+					varScopeInfo.put(rightInfo, new HashMap<>(currentScopeInfo));
+				}
 				info.isConst = false;
 			} else {
 				for(int i = 0; i < length; i++) {
@@ -70,8 +99,9 @@ public class TACOptimizedGenerator extends TACGenerator {
 						" Actual:" + jjtNodeName[node.getId()]);
 			}
 		}
-		nodeHash.put(node, result);
+		//nodeHash.put(node, result);
 		info.hash = result;
+		info.node = node;
 		return info;
 	}
 	
@@ -107,7 +137,7 @@ public class TACOptimizedGenerator extends TACGenerator {
 			}
 			return lhs;
 		case JJTNUMBER:
-			return getNumberInt((String)((SimpleNode)node).jjtGetValue());
+			return NumberUtil.getNumberInt((String)((SimpleNode)node).jjtGetValue());
 		default:
 			throw new RuntimeException("Unexpected node:" + node + 
 					" JJTADDITIVEEXPRESSION, JJTMULTIPLICATIVEEXPRESSION or JJTNUMBER" + 
@@ -115,44 +145,99 @@ public class TACOptimizedGenerator extends TACGenerator {
 		}
 	}
 	
-	private int getNumberInt(String str) {
-		str = str.toLowerCase();
-		if(str.startsWith("0"))
-			if(str.length()==1)
-				return 0;
-			else
-				return Integer.valueOf(str.substring(1), 8);
-		else if(str.startsWith("0x"))
-			return Integer.valueOf(str.substring(1), 16);
-		else if(str.startsWith("0b"))
-			return Integer.valueOf(str.substring(1), 2);
-		else if(str.indexOf("e") > -1)
-		{
-			String[] strings = str.split("e");
-			float l1 = Float.valueOf(strings[0]);
-			int l2 = Integer.valueOf(strings[1]);
-			return (int)(Math.pow(10, l2) * l1);
+	private void cse() {
+		int length = expressions.size();
+		for(int i = 0; i < length; i++) {
+			NodeInfo source = expressions.get(i);
+			for(int j = i+1; j < length; j++) {
+				NodeInfo target = expressions.get(j);
+				if(source.hash == target.hash) {
+					if(isNodeEquals(source.node, target.node)) {
+						if(isInSameScope(source.assignName, source, target)) {
+							SimpleNode ss = (SimpleNode)source.node;
+							commonSubexpressionEliminationTable.put(target.node, source.assignName);
+							//System.out.println("CSE!");
+						}
+					}
+				}
+			}
 		}
-		return Integer.valueOf(str);
+	}
+	
+	private boolean isNodeEquals(Node n1, Node n2) {
+		if(n1.getId() != n2.getId())
+			return false;
+		if(n1.jjtGetNumChildren() != n2.jjtGetNumChildren())
+			return false;
+		SimpleNode sn1 = (SimpleNode)n1, sn2 = (SimpleNode)n2;
+		if(sn1.jjtGetValue() == null && sn2.jjtGetValue() != null)
+			return false;
+		if(sn1.jjtGetValue() == null || !sn1.jjtGetValue().equals(sn2.jjtGetValue()))
+			return false;
+		boolean result = true;
+		for(int i = 0; i < n1.jjtGetNumChildren(); i++) {
+			result &= isNodeEquals(n1.jjtGetChild(i), n2.jjtGetChild(i));
+		}
+		return result;
+	}
+	
+	private boolean isInSameScope(String assignName, NodeInfo ni1, NodeInfo ni2) {
+		Map<String, Integer> vs1 = varScopeInfo.get(ni1), vs2 = varScopeInfo.get(ni2);
+		SimpleNode sn1 = (SimpleNode)ni1.node;
+		return (assignName == null || isInSameScopeDo(assignName, vs1, vs2)) && isInSameScopeDo(sn1, vs1, vs2);
+	}
+	
+	private boolean isInSameScopeDo(String assignName, Map<String, Integer> scope1, Map<String, Integer> scope2) {
+		String name = assignName;
+		Integer s1 = scope1.get(name);
+		Integer s2 = scope2.get(name);
+		if(s1 == null && s2 == 1)
+			return true;
+		if(s1 != null && s2 != s1 + 1)
+			return true;
+		return false;
+	}
+	
+	private boolean isInSameScopeDo(SimpleNode node, Map<String, Integer> scope1, Map<String, Integer> scope2) {
+		if(node.getId() == JJTIDENTIFIER) {
+			String name = (String)node.jjtGetValue();
+			Integer s1 = scope1.get(name);
+			Integer s2 = scope2.get(name);
+			if(s1 == null && s2 == null)
+				return true;
+			if(s1 != null && s1.equals(s2))
+				return true;
+			return false;
+		}
+		boolean result = true;
+		for(int i = 0; i < node.jjtGetNumChildren(); i++) {
+			result &= isInSameScopeDo((SimpleNode)node.jjtGetChild(i), scope1, scope2);
+		}
+		return result;
 	}
 	
 	private static class NodeInfo {
 		int hash;
 		boolean isConst = true;
+		Node node;
+		String assignName = null;
 	}
 
 	@Override
 	protected void visitAssignment (TACProgram program, Node statement) {
 		assertChildrenNum(statement, 2);
-		String theConst = null;
+		String theConst = null, theCSE = null;
+		Variable variable = visitIdentifier(program, statement.jjtGetChild(0), false);
+		RValue rvalue;
 		if((theConst = constFoldingTable.get(statement.jjtGetChild(1))) != null) {
-			Variable variable = visitIdentifier(program, statement.jjtGetChild(0), false);
-			RValue rvalue = program.constant(theConst);
-			program.assign(variable, Operator.ASSIGN, rvalue, null);
-			releaseTemp(rvalue);
+			rvalue = getConstant(program, theConst);
+		} else if((theCSE = commonSubexpressionEliminationTable.get(statement.jjtGetChild(1))) != null) {
+			rvalue = getVariable(program, theCSE, true);
 		} else {
-			super.visitAssignment(program, statement);
+			rvalue = visitExpression(program, statement.jjtGetChild(1));
 		}
+		program.assign(variable, Operator.ASSIGN, rvalue, null);
+		releaseTemp(rvalue);
 	}
 
 	@Override
@@ -162,12 +247,12 @@ public class TACOptimizedGenerator extends TACGenerator {
 		String theConst = null;
 		RValue left = null, right = null;
 		if((theConst = constFoldingTable.get(condition.jjtGetChild(0))) != null) {
-			left = program.constant(theConst);
+			left = getConstant(program, theConst);
 		} else {
 			left = visitExpression(program, condition.jjtGetChild(0)); //生成LHS的计算
 		}
 		if((theConst = constFoldingTable.get(condition.jjtGetChild(1))) != null) {
-			right = program.constant(theConst);
+			right = getConstant(program, theConst);
 		} else {
 			right = visitExpression(program, condition.jjtGetChild(1)); //生成RHS的计算
 		}
